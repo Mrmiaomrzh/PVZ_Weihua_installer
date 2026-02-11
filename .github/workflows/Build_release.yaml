@@ -1,0 +1,104 @@
+name: Build PVZ Weihua Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号 (对应 MyAppVerNum, 例如: 1.0.5)'
+        required: true
+        default: '1.0.0'
+      include_tools:
+        description: '是否一同打包游戏补丁及工具 (src/Tools)?'
+        required: true
+        type: boolean
+        default: false
+      pre_install_text:
+        description: '安装前显示文本 (留空则默认复制 src/IPT/IBF.txt)'
+        required: false
+        type: string
+      post_install_text:
+        description: '安装后显示文本 (留空则默认复制 src/IPT/IAF.txt)'
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Assets and Script
+        shell: powershell
+        run: |
+          $ver = "${{ inputs.version }}"
+          $includeTools = "${{ inputs.include_tools }}"
+          $preInput = "${{ inputs.pre_install_text }}"
+          $postInput = "${{ inputs.post_install_text }}"
+
+          # 1. 处理游戏补丁及工具 [对应需求: 选择是否一同打包]
+          if ($includeTools -eq 'true') {
+            Write-Host "检测到开启工具打包，正在合并内容至 Game 目录..."
+            if (Test-Path "src/Tools") {
+              Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
+            }
+          }
+
+          # 2. 处理安装前文本 (IBF.txt) [对应需求: 添加安装文本，不输入即默认]
+          if ([string]::IsNullOrWhiteSpace($preInput)) {
+            Write-Host "使用默认安装前文本..."
+            Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
+          } else {
+            $preInput | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
+          }
+
+          # 3. 处理安装后文本 (IAF.txt) [对应需求: 添加安装文本，不输入即默认]
+          if ([string]::IsNullOrWhiteSpace($postInput)) {
+            Write-Host "使用默认安装后文本..."
+            Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+          } else {
+            $postInput | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+          }
+
+          # 4. 复制并修改 ISS 脚本 [对应需求: 修改 MyAppVerNum 和 MyAppVerFull]
+          Write-Host "同步修改 Main.iss 变量..."
+          $issSource = "src/Main.iss"
+          $issTarget = "Setup/PVZ_Weihua.iss"
+          Copy-Item $issSource -Destination $issTarget -Force
+
+          $content = Get-Content $issTarget -Raw
+          # 替换版本号变量
+          $content = $content -replace '(#define MyAppVerNum\s+)"[^"]*"', "`$1""$ver"""
+          $content = $content -replace '(#define MyAppVerFull\s+)"[^"]*"', "`$1""$ver"""
+          
+          # 强制将修改后的内容写回 (确保编码为 UTF-8 带 BOM，Inno Setup 兼容性更好)
+          [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, [System.Text.Encoding]::UTF8)
+
+      - name: Compile Installer with Inno Setup
+        uses: MinhThai/inno-setup-action@v1.2.2
+        with:
+          path: Setup/PVZ_Weihua.iss
+
+      - name: Capture Release Notes
+        id: notes
+        shell: powershell
+        run: |
+          # 读取安装前文本作为 Release 介绍
+          $text = Get-Content "Setup/IBF.txt" -Raw
+          "RELEASENOTES<<EOF" >> $env:GITHUB_OUTPUT
+          $text >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: PVZ Weihua v${{ inputs.version }}
+          body: ${{ steps.notes.outputs.RELEASENOTES }}
+          files: |
+            Output/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

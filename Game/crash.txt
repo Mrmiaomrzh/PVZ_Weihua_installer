@@ -1,0 +1,74 @@
+Exception: Access Violation (code 0xc0000005) at address 0045AC81 in thread 45A0
+Module: PlantsVsZombies.exe
+Module Handle:00400000
+Exception Address:PlantsVsZombies.exe+5AC81(0045AC81)
+Compile Time:Aug 16 2025 14:34:32
+Logical Address: 0001:00059C81
+
+0019FAD4 0045AC81 0001:00059C81 PlantsVsZombies.exe
+Params: 00B00000 0000000E 00000000 0045B080
+
+
+EAX:1CBBBD48 EBX:FFFFFFFF ECX:00000000 EDX:FFFFFFFF ESI:1CBBBD48 EDI:8000007A
+EIP:0045AC81 ESP:0019FAC8  EBP:00000001
+CS:0023 SS:002B DS:002B ES:002B FS:0053 GS:002B
+Flags:00210206
+
+[esp-28]:00000000	[esp-24]:00000000	[esp-20]:00000000	[esp-1C]:00000000	[esp-18]:00000000	[esp-14]:00000000	[esp-10]:00000000	[esp-C]:00000000	[esp-8]:1CBF2A38	[esp-4]:0019FB1C	[esp+0]:8000007A	[esp+4]:1CBBBD48	[esp+8]:0019FB64	[esp+C]:FFFFFFFF	[esp+10]:7BA406FC	[esp+14]:00B00000	[esp+18]:0000000E	[esp+1C]:00000000	[esp+20]:0045B080	[esp+24]:1CBBBD48	[esp+28]:00000001	
+
+Disassembly Code:
+0045AC4F	mov edi, dword ptr [esp + 0x14]
+0045AC53	cmp edi, dword ptr [esi + 4]
+0045AC56	jne 0x45ac5d
+0045AC58	call 0x61c63f
+0045AC5D	mov eax, dword ptr [edi + 0x18]
+0045AC60	pop edi
+0045AC61	pop esi
+0045AC62	pop ebx
+0045AC63	add esp, 0x10
+0045AC66	ret 
+0045AC67	int3 
+0045AC68	int3 
+0045AC69	int3 
+0045AC6A	int3 
+0045AC6B	int3 
+0045AC6C	int3 
+0045AC6D	int3 
+0045AC6E	int3 
+0045AC6F	int3 
+0045AC70	sub esp, 0x10
+0045AC73	mov eax, dword ptr [esp + 0x14]
+0045AC77	mov ecx, dword ptr [eax]
+0045AC79	push ebx
+0045AC7A	push ebp
+0045AC7B	mov ebp, dword ptr [esp + 0x20]
+0045AC7F	push esi
+0045AC80	push edi
+>>0045AC81	mov edi, dword ptr [ecx + 0x374]
+0045AC87	lea esi, [edi + 4]
+0045AC8A	lea ebx, [esp + 0x28]
+0045AC8E	lea eax, [esp + 0x10]
+0045AC92	mov dword ptr [esp + 0x28], ebp
+0045AC96	call 0x45bb80
+0045AC9B	mov ebx, dword ptr [esp + 0x10]
+0045AC9F	test ebx, ebx
+0045ACA1	mov edx, dword ptr [esi + 4]
+0045ACA4	mov dword ptr [esp + 0x1c], edx
+0045ACA8	je 0x45acae
+0045ACAA	cmp ebx, esi
+0045ACAC	je 0x45acb3
+0045ACAE	call 0x61c63f
+
+Windows Ver: NT 6.2  Build 9200
+DDraw Ver: 
+DSound Ver: 
+
+Product: PlantsVsZombies
+Version: 1.0.0.1051
+Time Loaded: 00:00:06
+Fullscreen: ·ñ
+Primary ThreadId: 45A0
+Times Played: 0
+Build Num: 0
+Build Date: 
+
