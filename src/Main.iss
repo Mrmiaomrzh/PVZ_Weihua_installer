@@ -38,9 +38,9 @@ DefaultGroupName=PVZ_Weihua {#MyAppVerNum}
 ; 许可文本:
 LicenseFile=..\src\IPT\LF.txt
 ; 安装前文本:
-InfoBeforeFile=..\Setup\ipt\IBF-{#MyAppVerNum}.txt
+InfoBeforeFile=..\Setup\IBF.txt
 ; 安装后文本:
-InfoAfterFile=..\Setup\ipt\IAF-{#MyAppVerNum}.txt
+InfoAfterFile=..\Setup\IAF.txt
 
 ; 移除以下行以在管理安装模式下运行 (为所有用户安装)。
 ; PrivilegesRequired=lowest
@@ -50,7 +50,7 @@ OutputDir=..\Output
 ; 打包名称:
 OutputBaseFilename=PVZ_Weihua {#MyAppVerNum} {#CCT} 安装程序
 ; 打包图标:
-SetupIconFile=..\PVZ_Weihua\{#MyAppVerNum}\Ico\weihua {#MyAppVerNum}.ico
+SetupIconFile=..\Setup\ico.ico
 
 ; 开启"固实压缩"[SolidCompression]
 SolidCompression=yes
@@ -64,8 +64,8 @@ Name: "chinesesimplified"; MessagesFile: "..\Setup\ChineseSimplified.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\PVZ_Weihua\{#MyAppVerNum}\PVZ_Weihua\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\PVZ_Weihua\{#MyAppVerNum}\PVZ_Weihua\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\Game\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\Game\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; 注意：不要在任何共享系统文件上使用 "Flags: ignoreversion" 
 
 [Icons]
