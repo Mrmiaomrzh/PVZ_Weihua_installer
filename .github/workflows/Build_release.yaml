@@ -83,8 +83,7 @@ jobs:
           # 以 UTF-8 (无BOM) 格式写入，确保 Inno Setup 兼容
           $Utf8NoBom = New-Object System.Text.UTF8Encoding($False)
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
-
-      # --- 替换为指定的 Inno Setup Action ---
+          
       - name: Compile Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
