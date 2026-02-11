@@ -56,13 +56,27 @@ jobs:
           }
 
           # 3. 处理安装后文本 (IAF.txt) [对应需求: 添加安装文本，不输入即默认]
-          if ([string]::IsNullOrWhiteSpace($postInput)) {
-            Write-Host "使用默认安装后文本..."
-            Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+          $preRaw = @'
+          ${{ github.event.inputs.pre_install_text }}
+          '@.Trim()
+
+          $postRaw = @'
+          ${{ github.event.inputs.post_install_text }}
+          '@.Trim()
+
+          # 处理 IBF (安装前文本)
+          if ([string]::IsNullOrWhiteSpace($preRaw)) {
+            Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
           } else {
-            $postInput | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+            $preRaw | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           }
 
+          # 处理 IAF (安装后文本)
+          if ([string]::IsNullOrWhiteSpace($postRaw)) {
+            Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+          } else {
+            $postRaw | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+          }
           # 4. 复制并修改 ISS 脚本 [对应需求: 修改 MyAppVerNum 和 MyAppVerFull]
           Write-Host "同步修改 Main.iss 变量..."
           $issSource = "src/Main.iss"
