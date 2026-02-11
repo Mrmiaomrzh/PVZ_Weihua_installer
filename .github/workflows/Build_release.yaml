@@ -89,7 +89,7 @@ jobs:
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
 
       - name: Install Inno Setup
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
+        uses: is-software/innosetup-action@v1.1
         with:
           install-all: true
 
