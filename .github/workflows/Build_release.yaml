@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '发布版本号 (对应 MyAppVerNum, 例如: 1.0.5)'
+        description: '发布版本号 (例如: 1.0.5)'
         required: true
         default: '1.0.0'
       include_tools:
@@ -13,11 +13,11 @@ on:
         type: boolean
         default: false
       pre_install_text:
-        description: '安装前显示文本 (留空则默认复制 src/IPT/IBF.txt)'
+        description: '安装前显示文本'
         required: false
         type: string
       post_install_text:
-        description: '安装后显示文本 (留空则默认复制 src/IPT/IAF.txt)'
+        description: '安装后显示文本'
         required: false
         type: string
 
@@ -33,75 +33,74 @@ jobs:
 
       - name: Prepare Assets and Script
         shell: powershell
+        # 将输入映射为环境变量，这样 PowerShell 就会把它们当做纯数据处理，不会破坏脚本语法
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_INCLUDE_TOOLS: ${{ github.event.inputs.include_tools }}
+          INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
+          INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
-          $ver = "${{ inputs.version }}"
-          $includeTools = "${{ inputs.include_tools }}"
-          $preInput = "${{ inputs.pre_install_text }}"
-          $postInput = "${{ inputs.post_install_text }}"
+          # 1. 从环境变量获取数据
+          $ver = $env:INPUT_VERSION
+          $includeTools = $env:INPUT_INCLUDE_TOOLS
+          $preRaw = $env:INPUT_PRE_TEXT
+          $postRaw = $env:INPUT_POST_TEXT
+          
+          # 确保 Output 目录存在
+          if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
 
-          # 1. 处理游戏补丁及工具 [对应需求: 选择是否一同打包]
+          # 2. 打包工具逻辑
           if ($includeTools -eq 'true') {
-            Write-Host "检测到开启工具打包，正在合并内容至 Game 目录..."
+            Write-Host "Merging tools..."
             if (Test-Path "src/Tools") {
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
             }
           }
 
-          # 2. 处理安装前文本 (IBF.txt) [对应需求: 添加安装文本，不输入即默认]
-          if ([string]::IsNullOrWhiteSpace($preInput)) {
-            Write-Host "使用默认安装前文本..."
-            Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
-          } else {
-            $preInput | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
-          }
-
-          # 3. 处理安装后文本 (IAF.txt) [对应需求: 添加安装文本，不输入即默认]
-          $preRaw = @'
-          ${{ github.event.inputs.pre_install_text }}
-          '@.Trim()
-
-          $postRaw = @'
-          ${{ github.event.inputs.post_install_text }}
-          '@.Trim()
-
-          # 处理 IBF (安装前文本)
+          # 3. 处理 IBF (安装前文本)
           if ([string]::IsNullOrWhiteSpace($preRaw)) {
+            Write-Host "Using default IBF.txt"
             Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
           } else {
+            Write-Host "Writing custom IBF.txt"
             $preRaw | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           }
 
-          # 处理 IAF (安装后文本)
+          # 4. 处理 IAF (安装后文本)
           if ([string]::IsNullOrWhiteSpace($postRaw)) {
+            Write-Host "Using default IAF.txt"
             Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
           } else {
+            Write-Host "Writing custom IAF.txt"
             $postRaw | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
-          # 4. 复制并修改 ISS 脚本 [对应需求: 修改 MyAppVerNum 和 MyAppVerFull]
-          Write-Host "同步修改 Main.iss 变量..."
+
+          # 5. 修改 Main.iss
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua.iss"
           Copy-Item $issSource -Destination $issTarget -Force
 
-          $content = Get-Content $issTarget -Raw
-          # 替换版本号变量
+          $content = Get-Content $issTarget -Raw -Encoding utf8
           $content = $content -replace '(#define MyAppVerNum\s+)"[^"]*"', "`$1""$ver"""
           $content = $content -replace '(#define MyAppVerFull\s+)"[^"]*"', "`$1""$ver"""
           
-          # 强制将修改后的内容写回 (确保编码为 UTF-8 带 BOM，Inno Setup 兼容性更好)
-          [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, [System.Text.Encoding]::UTF8)
+          # 这种方式保存 UTF8 with BOM，对 Inno Setup 最友好
+          $Utf8NoBom = New-Object System.Text.UTF8Encoding($False)
+          [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
 
-      - name: Compile Installer with Inno Setup
+      - name: Install Inno Setup
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
-          path: Setup/PVZ_Weihua.iss
+          install-all: true
+
+      - name: Compile Installer
+        run: iscc Setup/PVZ_Weihua.iss
 
       - name: Capture Release Notes
         id: notes
         shell: powershell
         run: |
-          # 读取安装前文本作为 Release 介绍
-          $text = Get-Content "Setup/IBF.txt" -Raw
+          $text = Get-Content "Setup/IBF.txt" -Raw -Encoding utf8
           "RELEASENOTES<<EOF" >> $env:GITHUB_OUTPUT
           $text >> $env:GITHUB_OUTPUT
           "EOF" >> $env:GITHUB_OUTPUT
@@ -109,8 +108,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ inputs.version }}
-          name: PVZ Weihua v${{ inputs.version }}
+          tag_name: v${{ github.event.inputs.version }}
+          name: PVZ Weihua v${{ github.event.inputs.version }}
           body: ${{ steps.notes.outputs.RELEASENOTES }}
           files: |
             Output/*.exe
