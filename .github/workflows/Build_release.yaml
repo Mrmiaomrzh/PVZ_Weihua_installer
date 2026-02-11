@@ -78,7 +78,7 @@ jobs:
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, [System.Text.Encoding]::UTF8)
 
       - name: Compile Installer with Inno Setup
-        uses: MinhThai/inno-setup-action@v1.2.2
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: Setup/PVZ_Weihua.iss
 
