@@ -13,11 +13,11 @@ on:
         type: boolean
         default: false
       pre_install_text:
-        description: '安装前显示文本'
+        description: '安装前显示文本 (留空则默认复制 src/IPT/IBF.txt)'
         required: false
         type: string
       post_install_text:
-        description: '安装后显示文本'
+        description: '安装后显示文本 (留空则默认复制 src/IPT/IAF.txt)'
         required: false
         type: string
 
@@ -33,73 +33,68 @@ jobs:
 
       - name: Prepare Assets and Script
         shell: powershell
-        # 将输入映射为环境变量，这样 PowerShell 就会把它们当做纯数据处理，不会破坏脚本语法
+        # 使用环境变量处理输入，防止特殊字符（如 []）破坏 PowerShell 语法
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           INPUT_INCLUDE_TOOLS: ${{ github.event.inputs.include_tools }}
           INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
           INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
-          # 1. 从环境变量获取数据
           $ver = $env:INPUT_VERSION
-          $includeTools = $env:INPUT_INCLUDE_TOOLS
-          $preRaw = $env:INPUT_PRE_TEXT
-          $postRaw = $env:INPUT_POST_TEXT
           
-          # 确保 Output 目录存在
+          # 1. 确保 Output 目录存在 (Main.iss 中定义了 OutputDir=..\Output)
           if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
 
-          # 2. 打包工具逻辑
-          if ($includeTools -eq 'true') {
-            Write-Host "Merging tools..."
+          # 2. 处理工具包打包逻辑
+          if ($env:INPUT_INCLUDE_TOOLS -eq 'true') {
+            Write-Host "Merging tools from src/Tools to Game directory..."
             if (Test-Path "src/Tools") {
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
             }
           }
 
-          # 3. 处理 IBF (安装前文本)
-          if ([string]::IsNullOrWhiteSpace($preRaw)) {
+          # 3. 处理安装前文本 (IBF.txt)
+          if ([string]::IsNullOrWhiteSpace($env:INPUT_PRE_TEXT)) {
             Write-Host "Using default IBF.txt"
             Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
           } else {
-            Write-Host "Writing custom IBF.txt"
-            $preRaw | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
+            $env:INPUT_PRE_TEXT | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           }
 
-          # 4. 处理 IAF (安装后文本)
-          if ([string]::IsNullOrWhiteSpace($postRaw)) {
+          # 4. 处理安装后文本 (IAF.txt)
+          if ([string]::IsNullOrWhiteSpace($env:INPUT_POST_TEXT)) {
             Write-Host "Using default IAF.txt"
             Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
           } else {
-            Write-Host "Writing custom IAF.txt"
-            $postRaw | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+            $env:INPUT_POST_TEXT | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
 
-          # 5. 修改 Main.iss
+          # 5. 修改并重命名 ISS 脚本
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua.iss"
+          Write-Host "Modifying $issSource to $issTarget"
           Copy-Item $issSource -Destination $issTarget -Force
 
           $content = Get-Content $issTarget -Raw -Encoding utf8
+          # 替换版本号变量
           $content = $content -replace '(#define MyAppVerNum\s+)"[^"]*"', "`$1""$ver"""
           $content = $content -replace '(#define MyAppVerFull\s+)"[^"]*"', "`$1""$ver"""
           
-          # 这种方式保存 UTF8 with BOM，对 Inno Setup 最友好
+          # 以 UTF-8 (无BOM) 格式写入，确保 Inno Setup 兼容
           $Utf8NoBom = New-Object System.Text.UTF8Encoding($False)
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
 
-      - name: Install Inno Setup
+      # --- 替换为指定的 Inno Setup Action ---
+      - name: Compile Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
-          install-all: true
-
-      - name: Compile Installer
-        run: iscc Setup/PVZ_Weihua.iss
+          path: Setup/PVZ_Weihua.iss
 
       - name: Capture Release Notes
         id: notes
         shell: powershell
         run: |
+          # 读取最终生成的 IBF.txt 作为 Release 介绍
           $text = Get-Content "Setup/IBF.txt" -Raw -Encoding utf8
           "RELEASENOTES<<EOF" >> $env:GITHUB_OUTPUT
           $text >> $env:GITHUB_OUTPUT
