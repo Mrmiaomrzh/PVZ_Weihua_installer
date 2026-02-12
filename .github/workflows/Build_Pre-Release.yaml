@@ -13,7 +13,11 @@ on:
         type: boolean
         default: true
       pre_install_text:
-        description: '預發布版更新日誌 (安裝前文本)'
+        description: '安裝前文本'
+        required: false
+        type: string
+      post_install_text:
+        description: '安裝後文本' 
         required: false
         type: string
 
@@ -33,10 +37,13 @@ jobs:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           INPUT_INCLUDE_TOOLS: ${{ github.event.inputs.include_tools }}
           INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
+          INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
           $ver = $env:INPUT_VERSION
           
+
           if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
+
 
           if ($env:INPUT_INCLUDE_TOOLS -eq 'true') {
             if (Test-Path "src/Tools") {
@@ -51,12 +58,19 @@ jobs:
           } else {
             $env:INPUT_PRE_TEXT | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           }
-          Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+
+
+          if ([string]::IsNullOrWhiteSpace($env:INPUT_POST_TEXT)) {
+            Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+          } else {
+            $env:INPUT_POST_TEXT | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+          }
 
 
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua_Beta.iss"
           Copy-Item $issSource -Destination $issTarget -Force
+
           $content = Get-Content $issTarget -Raw -Encoding utf8
           $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$ver"""
           $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$ver"""
@@ -67,6 +81,7 @@ jobs:
           $content = $content -replace 'SetupIconFile=.*', 'SetupIconFile=ico.ico'
           $content = $content -replace 'Source:\s*".*\\{#MyAppExeName}";', 'Source: "..\Game\{#MyAppExeName}";'
           $content = $content -replace 'Source:\s*".*\\\*";', 'Source: "..\Game\*";'
+          
           $Utf8NoBom = New-Object System.Text.UTF8Encoding($False)
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
 
@@ -82,7 +97,7 @@ jobs:
           name: PVZ Weihua ${{ github.event.inputs.version }} (BETA)
           body: |
             ### 🧪 預發布版測試說明
-            ${{ github.event.inputs.pre_install_text || '此版本為自動構建的測試版，僅供內部測試使用。' }}
+            ${{ github.event.inputs.pre_install_text || '此版本為自動構建的測試版。' }}
           files: |
             Output/*.exe
           prerelease: true
