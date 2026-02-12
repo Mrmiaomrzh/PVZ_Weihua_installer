@@ -4,20 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '預發布版本號 (例如: 1.0.5-beta1)'
+        description: '基礎版本號 (例如: 0.0.1)'
         required: true
-        default: '1.0.0-beta'
+        default: '1.0.0'
       include_tools:
         description: '是否一同打包遊戲補丁及工具 (src/Tools)?'
         required: true
         type: boolean
         default: true
       pre_install_text:
-        description: '安裝前文本'
+        description: '安裝前文本 (更新日誌)'
         required: false
         type: string
       post_install_text:
-        description: '安裝後文本' 
+        description: '安裝後文本 (注意事項)'
         required: false
         type: string
 
@@ -39,41 +39,46 @@ jobs:
           INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
           INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
-          $ver = $env:INPUT_VERSION
+          # 1. 生成時間戳
+          $buildTime = Get-Date -Format "yyyyMMddHHmm"
+        
+          # 2. 生成顯示版本號 (X.X.X.X-YYYYMMDDHHMM)
+          $verRaw = "$($env:INPUT_VERSION)-$buildTime"
           
+          # 3. 生成二進制版本號
+          $cleanVer = ($env:INPUT_VERSION -split '[^0-9]+' | Where-Object { $_ -ne "" })[0..2]
+          while ($cleanVer.Count -lt 3) { $cleanVer += "0" }
+          $verBinary = "$($cleanVer -join ".").0"
+          
+          Write-Host "Display Version (with timestamp): $verRaw"
+          Write-Host "Binary Version for Windows: $verBinary"
 
+          # 4. 準備目錄與工具
           if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
-
-
-          if ($env:INPUT_INCLUDE_TOOLS -eq 'true') {
-            if (Test-Path "src/Tools") {
+          if ($env:INPUT_INCLUDE_TOOLS -eq 'true' -and (Test-Path "src/Tools")) {
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
-            }
           }
 
-
+          # 5. 處理安裝文本
           if ([string]::IsNullOrWhiteSpace($env:INPUT_PRE_TEXT)) {
             $defaultPre = Get-Content "src/IPT/IBF.txt" -Raw
-            "[PRE-RELEASE / BETA] 此版本為測試版本。`n`n$defaultPre" | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
+            "[PRE-RELEASE] 編譯時間: $buildTime`n`n$defaultPre" | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           } else {
             $env:INPUT_PRE_TEXT | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           }
-
-
           if ([string]::IsNullOrWhiteSpace($env:INPUT_POST_TEXT)) {
             Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
           } else {
             $env:INPUT_POST_TEXT | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
 
-
+          # 6. 修改 ISS 腳本
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua_Beta.iss"
           Copy-Item $issSource -Destination $issTarget -Force
-
           $content = Get-Content $issTarget -Raw -Encoding utf8
-          $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$ver"""
-          $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$ver"""
+          $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$verRaw"""
+          $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$verBinary"""
           $content = $content -replace 'InfoBeforeFile=.*', 'InfoBeforeFile=IBF.txt'
           $content = $content -replace 'InfoAfterFile=.*', 'InfoAfterFile=IAF.txt'
           $content = $content -replace 'LicenseFile=.*', 'LicenseFile=..\src\IPT\LF.txt'
@@ -82,8 +87,10 @@ jobs:
           $content = $content -replace 'Source:\s*".*\\{#MyAppExeName}";', 'Source: "..\Game\{#MyAppExeName}";'
           $content = $content -replace 'Source:\s*".*\\\*";', 'Source: "..\Game\*";'
           
-          $Utf8NoBom = New-Object System.Text.UTF8Encoding($False)
-          [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
+          [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, (New-Object System.Text.UTF8Encoding($False)))
+          
+
+          echo "FINAL_VER=$verRaw" >> $env:GITHUB_ENV
 
       - name: Compile Beta Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
@@ -93,11 +100,14 @@ jobs:
       - name: Create Beta Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.event.inputs.version }}
-          name: PVZ Weihua ${{ github.event.inputs.version }} (BETA)
+          tag_name: v${{ env.FINAL_VER }}
+          name: PVZ Weihua ${{ env.FINAL_VER }} (BETA)
           body: |
-            ### 🧪 預發布版測試說明
-            ${{ github.event.inputs.pre_install_text || '此版本為自動構建的測試版。' }}
+            ### 🧪 自動編譯測試版
+            - **基礎版本**: ${{ github.event.inputs.version }}
+            - **編譯標籤**: ${{ env.FINAL_VER }}
+            - **更新內容**: 
+            ${{ github.event.inputs.pre_install_text || '無詳細說明' }}
           files: |
             Output/*.exe
           prerelease: true
