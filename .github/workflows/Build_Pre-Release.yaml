@@ -65,7 +65,6 @@ jobs:
           }
 
           # 4. 處理安裝文本
-          # 處理 IBF (安裝前)
           $preContent = $env:INPUT_PRE_TEXT
           if ([string]::IsNullOrWhiteSpace($preContent)) {
               if (Test-Path "src/IPT/IBF.txt") {
@@ -75,19 +74,19 @@ jobs:
               }
           }
           $finalPreText = "[PRE-RELEASE] Build Time: $buildTime`r`n`r`n$preContent"
-          $finalPreText | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8BOM -Force
+          # 在 Windows PowerShell 5.1 中，utf8 參數會自動生成帶 BOM 的文件
+          $finalPreText | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
 
-          # 處理 IAF (安裝後)
           $postContent = $env:INPUT_POST_TEXT
           if ([string]::IsNullOrWhiteSpace($postContent)) {
               if (Test-Path "src/IPT/IAF.txt") {
                   $iafContent = Get-Content "src/IPT/IAF.txt" -Raw
-                  $iafContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8BOM -Force
+                  $iafContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
               } else {
-                  "Installation Complete." | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8BOM -Force
+                  "Installation Complete." | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
               }
           } else {
-              $postContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8BOM -Force
+              $postContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
 
           # 5. 修改 ISS 腳本並強制修正路徑
