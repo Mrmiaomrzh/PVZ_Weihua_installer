@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '基礎版本號 (例如: 0.0.1)'
+        description: '基礎版本號 (例如: 0.4.7)'
         required: true
         default: '1.0.0'
       include_tools:
@@ -39,46 +39,62 @@ jobs:
           INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
           INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
-          # 1. 生成時間戳
+          # 1. 生成時間戳和版本號
           $buildTime = Get-Date -Format "yyyyMMddHHmm"
-        
-          # 2. 生成顯示版本號 (X.X.X.X-YYYYMMDDHHMM)
-          $verRaw = "$($env:INPUT_VERSION)-$buildTime"
+          $baseVer = $env:INPUT_VERSION
+          $verRaw = "$baseVer-$buildTime"
           
-          # 3. 生成二進制版本號
-          $cleanVer = ($env:INPUT_VERSION -split '[^0-9]+' | Where-Object { $_ -ne "" })[0..2]
-          while ($cleanVer.Count -lt 3) { $cleanVer += "0" }
-          $verBinary = "$($cleanVer -join ".").0"
-          
-          Write-Host "Display Version (with timestamp): $verRaw"
-          Write-Host "Binary Version for Windows: $verBinary"
+          # 清洗純數字版本號 (X.X.X.X)
+          $digits = ($baseVer -split '[^0-9]+' | Where-Object { $_ -ne "" })
+          $verBinary = "$($digits[0..2] -join '.').0"
+          if ([string]::IsNullOrEmpty($verBinary)) { $verBinary = "1.0.0.0" }
 
-          # 4. 準備目錄與工具
+          Write-Host "Build Time: $buildTime"
+          Write-Host "Display Version: $verRaw"
+
+          # 2. 目錄準備
           if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
+          if (!(Test-Path "Setup")) { New-Item -ItemType Directory -Path "Setup" | Out-Null }
+
+          # 3. 合併工具
           if ($env:INPUT_INCLUDE_TOOLS -eq 'true' -and (Test-Path "src/Tools")) {
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
           }
 
-          # 5. 處理安裝文本
-          if ([string]::IsNullOrWhiteSpace($env:INPUT_PRE_TEXT)) {
-            $defaultPre = Get-Content "src/IPT/IBF.txt" -Raw
-            "[PRE-RELEASE] 編譯時間: $buildTime`n`n$defaultPre" | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
-          } else {
-            $env:INPUT_PRE_TEXT | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
+          # 4. 安全處理文本 (使用環境變量，避免解析錯誤)
+          $preContent = $env:INPUT_PRE_TEXT
+          if ([string]::IsNullOrWhiteSpace($preContent)) {
+              if (Test-Path "src/IPT/IBF.txt") {
+                  $preContent = Get-Content "src/IPT/IBF.txt" -Raw
+              } else {
+                  $preContent = "PVZ Weihua Pre-release Build."
+              }
           }
-          if ([string]::IsNullOrWhiteSpace($env:INPUT_POST_TEXT)) {
-            Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+          # 合併編譯時間提示
+          $finalPreText = "[PRE-RELEASE] Build Time: $buildTime`n`n$preContent"
+          $finalPreText | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
+
+          $postContent = $env:INPUT_POST_TEXT
+          if ([string]::IsNullOrWhiteSpace($postContent)) {
+              if (Test-Path "src/IPT/IAF.txt") {
+                  Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
+              } else {
+                  "Installation Complete." | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+              }
           } else {
-            $env:INPUT_POST_TEXT | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+              $postContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
 
-          # 6. 修改 ISS 腳本
+          # 5. 修改 ISS 腳本
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua_Beta.iss"
           Copy-Item $issSource -Destination $issTarget -Force
+          
           $content = Get-Content $issTarget -Raw -Encoding utf8
           $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$verRaw"""
           $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$verBinary"""
+          
+          # 強制修正所有引用
           $content = $content -replace 'InfoBeforeFile=.*', 'InfoBeforeFile=IBF.txt'
           $content = $content -replace 'InfoAfterFile=.*', 'InfoAfterFile=IAF.txt'
           $content = $content -replace 'LicenseFile=.*', 'LicenseFile=..\src\IPT\LF.txt'
@@ -89,7 +105,7 @@ jobs:
           
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, (New-Object System.Text.UTF8Encoding($False)))
           
-
+          # 輸出環境變量給後續步驟
           echo "FINAL_VER=$verRaw" >> $env:GITHUB_ENV
 
       - name: Compile Beta Installer
@@ -104,9 +120,8 @@ jobs:
           name: PVZ Weihua ${{ env.FINAL_VER }} (BETA)
           body: |
             ### 🧪 自動編譯測試版
-            - **基礎版本**: ${{ github.event.inputs.version }}
-            - **編譯標籤**: ${{ env.FINAL_VER }}
-            - **更新內容**: 
+            - **編譯版本**: ${{ env.FINAL_VER }}
+            - **更新說明**: 
             ${{ github.event.inputs.pre_install_text || '無詳細說明' }}
           files: |
             Output/*.exe
