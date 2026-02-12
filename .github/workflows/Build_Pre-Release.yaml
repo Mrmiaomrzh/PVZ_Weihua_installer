@@ -4,14 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '發布版本號'
+        description: '預發布版本號 (例如: 1.0.5-beta1)'
         required: true
         default: '1.0.0-beta'
-      is_prerelease:
-        description: '是否標記為預發布版本？'
-        required: true
-        type: boolean
-        default: true
       include_tools:
         description: '是否一同打包遊戲補丁及工具 (src/Tools)?'
         required: true
@@ -19,10 +14,6 @@ on:
         default: true
       pre_install_text:
         description: '預發布版更新日誌 (安裝前文本)'
-        required: false
-        type: string
-      post_install_text:
-        description: '測試注意事項 (安裝後文本)'
         required: false
         type: string
 
@@ -42,51 +33,40 @@ jobs:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           INPUT_INCLUDE_TOOLS: ${{ github.event.inputs.include_tools }}
           INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
-          INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
           $ver = $env:INPUT_VERSION
           
-          if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" }
+          if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
 
           if ($env:INPUT_INCLUDE_TOOLS -eq 'true') {
-            Write-Host "Merging tools for beta testing..."
             if (Test-Path "src/Tools") {
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
             }
           }
 
 
-          # 如果用戶沒輸入，則在默認文本前加上 [測試版] 字樣
           if ([string]::IsNullOrWhiteSpace($env:INPUT_PRE_TEXT)) {
             $defaultPre = Get-Content "src/IPT/IBF.txt" -Raw
-            "[PRE-RELEASE / BETA] 此版本為測試版本，可能存在不穩定因素。`n`n$defaultPre" | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
+            "[PRE-RELEASE / BETA] 此版本為測試版本。`n`n$defaultPre" | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           } else {
             $env:INPUT_PRE_TEXT | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
           }
+          Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
 
-          if ([string]::IsNullOrWhiteSpace($env:INPUT_POST_TEXT)) {
-            Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
-          } else {
-            $env:INPUT_POST_TEXT | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
-          }
 
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua_Beta.iss"
           Copy-Item $issSource -Destination $issTarget -Force
-
           $content = Get-Content $issTarget -Raw -Encoding utf8
-          
-          # 替換版本號 (支持帶後綴的版本號)
           $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$ver"""
           $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$ver"""
-          
           $content = $content -replace 'InfoBeforeFile=.*', 'InfoBeforeFile=IBF.txt'
           $content = $content -replace 'InfoAfterFile=.*', 'InfoAfterFile=IAF.txt'
+          $content = $content -replace 'LicenseFile=.*', 'LicenseFile=..\src\IPT\LF.txt'
           $content = $content -replace 'MessagesFile=.*', 'MessagesFile=ChineseSimplified.isl'
           $content = $content -replace 'SetupIconFile=.*', 'SetupIconFile=ico.ico'
           $content = $content -replace 'Source:\s*".*\\{#MyAppExeName}";', 'Source: "..\Game\{#MyAppExeName}";'
           $content = $content -replace 'Source:\s*".*\\\*";', 'Source: "..\Game\*";'
-          
           $Utf8NoBom = New-Object System.Text.UTF8Encoding($False)
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $Utf8NoBom)
 
@@ -99,13 +79,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.version }}
-          name: PVZ Weihua ${{ github.event.inputs.version }} (Pre-release)
+          name: PVZ Weihua ${{ github.event.inputs.version }} (BETA)
           body: |
             ### 🧪 預發布版測試說明
-            ${{ github.event.inputs.pre_install_text || '此版本為自動構建的預發布版，僅供測試使用。' }}
+            ${{ github.event.inputs.pre_install_text || '此版本為自動構建的測試版，僅供內部測試使用。' }}
           files: |
             Output/*.exe
-          prerelease: ${{ github.event.inputs.is_prerelease }}
-          overwrite: true
+          prerelease: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
