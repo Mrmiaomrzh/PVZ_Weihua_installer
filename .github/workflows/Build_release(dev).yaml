@@ -53,21 +53,23 @@ jobs:
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
           }
 
-          # 4. 处理文本 (使用 Base64 避免中文乱码破坏脚本结构)
-          function Decode-B64 ($b64) {
-              return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
-          }
-
-          $header = Decode-B64 "54mI5pys5pu05paw5YaF5a6577ya" # 版本更新內容：
-          $footerTitle = Decode-B64 "6KGl5充6Kqq5piOOg==" # 補充說明:
-          $noteLine1 = Decode-B64 "IOWcqOmuOaIsumBjueoizos5aaC5p6c6YGH5Yiw56qX5Y+j55m95bGP5o6D5rG1LOiri+mAnOWHuOmuOaIsumInuaJk+mKaiOmuOaIsumtmOWCqOebruWMmCw="
-          $noteLine2 = Decode-B64 "IOWพnemhuOmAsuWFp1vkv67lpI3lkowqOWxlemWuS7tF3mlYfku7blk6otW+kv67lpI3domWuS7tblk6os6YGL6KGMW+OAkOmGLuihjOWพnemTqueonuaIsumAkV3nqqXlj6P55m95bGP5Y2h5q27LnJlZ13mlYfku7Ys"
-          $noteLine3 = Decode-B64 "IOmGLuihjOWพnemHjeaWsOWIn+WLlemuOaIsumNs+WPr+OAgg=="
-          $bugFeedback = Decode-B64 "IOmYp+WIsEJ1Z+WPr+mAsuWFpSDlqIHljJbniaXlhazmuKzntYQg5Y+N6a6Lfg=="
-          $noContent = Decode-B64 "54Sh6KmarOatpOatpOWunOatpOiqqOatpOOAgg=="
+          # 4. 文本处理 (使用 [char] 编码完全避开 YAML/PowerShell 编码解析坑)
+          # 版本更新内容：
+          $header = [string][char[]](29256,26412,26356,26032,20839,23481,65306)
+          # 补充说明:
+          $footerTitle = [string][char[]](34917,20805,35500,26126,58)
+          
+          # 提示语正文 (拆解为数组)
+          $noteLines = @(
+              "$([char]32)$([char]22312,36938,25138,36942,31243,20013,44,22914,26524,36935,21040,31383,21475,30333,23631,24773,27841,44)$([char]35531,36864,20986,36938,25138,24460,25171,38283,36938,25138,23384,20738,30446,37636,44)",
+              "$([char]32)$([char]20381,27425,36914,20837,91,20462,24489,21644,25892,23637,25991,20214,93,25991,20214,22846,45,91,20462,24489,93,25991,20214,22846,44,36939,34892,91,12304,36939,34892,24460,25171,38283,36938,25138,12305,31383,21475,30333,23631,21345,27515,46,114,101,103,93,25991,20214,44)",
+              "$([char]32)$([char]36939,34892,24460,37325,26032,21855,21205,36938,25138,21363,21487,12290)",
+              "",
+              "$([char]32)$([char]36935,21040,66,117,103,21487,36914,20837,32,23041,21270,29256,20844,28204,32068,32,21453,39243,126)"
+          )
 
           $userContent = $env:INPUT_PRE_TEXT
-          if ([string]::IsNullOrWhiteSpace($userContent)) { $userContent = $noContent }
+          if ([string]::IsNullOrWhiteSpace($userContent)) { $userContent = [string][char[]](28961,35443,32016,26356,26032,35500,26126,12290) }
 
           $lines = @()
           $lines += $header
@@ -75,13 +77,10 @@ jobs:
           $lines += ""
           $lines += $footerTitle
           $lines += ""
-          $lines += $noteLine1
-          $lines += $noteLine2
-          $lines += $noteLine3
-          $lines += ""
-          $lines += $bugFeedback
+          foreach ($line in $noteLines) { $lines += $line }
 
           $finalPreText = $lines -join "`r`n"
+          # 使用 PowerShell 5.1 默认的带 BOM 的 UTF8
           $finalPreText | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
 
           # 5. 处理安装后文本
@@ -90,7 +89,7 @@ jobs:
               if (Test-Path "src/IPT/IAF.txt") {
                   Get-Content "src/IPT/IAF.txt" -Raw | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
               } else {
-                  (Decode-B64 "5a6J6KOX5a6M5oiQ44CC") | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+                  ([string][char[]](23433,35037,23436,25104,12290)) | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
               }
           } else {
               $postContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
