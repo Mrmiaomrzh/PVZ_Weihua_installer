@@ -1,4 +1,4 @@
-name: Build PVZ Weihua Installer [Dev]
+name: Build PVZ Weihua Installer
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. 处理安装前文本 (IBF.txt) - 无 BOM UTF-8
+      # 1. 处理安装前文本 (IBF.txt)
       - name: Process IBF Text
         shell: powershell
         run: |
@@ -36,15 +36,15 @@ jobs:
           $TemplatePath = "src/IPT/IBF.txt"
           $TargetPath = "Setup/IBF.txt"
           
-          # [cite_start]显式创建不带 BOM 的 UTF-8 编码实例 [cite: 1, 2]
-          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          # 使用 UTF8 编码读取模板 (带 BOM)
+          $Utf8WithBom = New-Object System.Text.UTF8Encoding($true)
           
           if ($InputPre -and $InputPre.Trim() -ne "") {
-              $Content = [System.IO.File]::ReadAllText($TemplatePath, $Utf8NoBom)
-              # [cite_start]替换模板中的占位符 [cite: 1, 4]
+              $Content = [System.IO.File]::ReadAllText($TemplatePath, $Utf8WithBom)
+              # 替换占位符
               $Content = $Content.Replace("{{USER_INPUT}}", $InputPre)
-              # [cite_start]以不带 BOM 的方式写入文件 [cite: 1, 4]
-              [System.IO.File]::WriteAllText($TargetPath, $Content, $Utf8NoBom)
+              # 写入带 BOM 的 UTF8 文件
+              [System.IO.File]::WriteAllText($TargetPath, $Content, $Utf8WithBom)
               # 准备 Release 说明
               $InputPre | Out-File -FilePath "release_notes.txt" -Encoding utf8
           } else {
@@ -52,46 +52,46 @@ jobs:
               "PVZ Weihua ${{ inputs.version }} 发布" | Out-File -FilePath "release_notes.txt" -Encoding utf8
           }
 
-      # 2. 处理安装后文本 (IAF.txt) - 无 BOM UTF-8
+      # 2. 处理安装后文本 (IAF.txt)
       - name: Process IAF Text
         shell: powershell
         run: |
-          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $Utf8WithBom = New-Object System.Text.UTF8Encoding($true)
           if ("${{ inputs.post_install_text }}" -ne "") {
-              [System.IO.File]::WriteAllText("Setup/IAF.txt", "${{ inputs.post_install_text }}", $Utf8NoBom)
+              [System.IO.File]::WriteAllText("Setup/IAF.txt", "${{ inputs.post_install_text }}", $Utf8WithBom)
           } else {
               Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
           }
 
-      # 3. 准备 ISS 脚本 (修改版本号) - 无 BOM UTF-8
+      # 3. 准备 ISS 脚本 (修改版本号)
       - name: Prepare ISS Script
         shell: powershell
         run: |
           $Ver = "${{ inputs.version }}"
-          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $Utf8WithBom = New-Object System.Text.UTF8Encoding($true)
           
-          # [cite_start]读取原始 ISS [cite: 1]
-          $Content = [System.IO.File]::ReadAllText("src/Main.iss", $Utf8NoBom)
+          # 读取原始 ISS
+          $Content = [System.IO.File]::ReadAllText("src/Main.iss", $Utf8WithBom)
           
-          # [cite_start]替换版本号定义 [cite: 1]
+          # 替换版本号定义 (匹配 #define MyAppVerNum "")
           $Content = $Content -replace '(#define\s+MyAppVerNum\s+")[^"]*(")', "`${1}$Ver`${2}"
           $Content = $Content -replace '(#define\s+MyAppVerFull\s+")[^"]*(")', "`${1}$Ver`${2}"
           
-          # [cite_start]另存为 Setup/PVZ_Weihua.iss [cite: 1]
-          [System.IO.File]::WriteAllText("Setup/PVZ_Weihua.iss", $Content, $Utf8NoBom)
+          # 另存为 Setup/PVZ_Weihua.iss (带 BOM)
+          [System.IO.File]::WriteAllText("Setup/PVZ_Weihua.iss", $Content, $Utf8WithBom)
 
-      # [cite_start]4. Inno Setup 编译 (更新为 v1.2.7) [cite: 1]
+      # 4. Inno Setup 编译 (更新为 v1.2.7)
       - name: Compile Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: Setup/PVZ_Weihua.iss
 
-      # [cite_start]5. 发布 Release [cite: 1]
+      # 5. 发布 Release
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ inputs.version }}
-          name: 植物大战僵尸威化版 v${{ inputs.version }}
+          name: PVZ Weihua v${{ inputs.version }}
           body_path: release_notes.txt
           files: Output/*.exe
         env:
