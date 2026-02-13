@@ -108,7 +108,7 @@ jobs:
       # 3. 编译 Installer
       # ----------------------------------------------------------------
       - name: Compile Installer
-        uses: minhng97/inno-setup-action@v1.2.2
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: Setup/PVZ_Weihua.iss
 
