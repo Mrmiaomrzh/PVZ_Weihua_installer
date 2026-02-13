@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (必填，例如 1.0.0)'
+        description: 'Version (e.g. 1.0.0)'
         required: true
         default: '1.0.0'
       pre_install_text:
-        description: '更新内容 (IBF): 留空则使用默认。会自动添加"版本更新内容"前缀和"白屏修复"后缀。'
+        description: 'Update Log (IBF): Will add prefix and suffix automatically.'
         required: false
         type: string
       post_install_text:
-        description: '安装后文本 (IAF): 留空则使用默认。'
+        description: 'Post-install text (IAF): Optional.'
         required: false
         type: string
 
@@ -20,130 +20,67 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write # 允许发布 Release
+      contents: write
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ----------------------------------------------------------------
-      # 1. 处理文本文件 (IBF.txt 和 IAF.txt)
-      # ----------------------------------------------------------------
+      # 1. Process Text Files
       - name: Process Text Files
         shell: powershell
         run: |
-          # --- 定义固定补充说明文本 ---
-          $FixedFooter = @"
-
-          补充说明:
-           在游戏过程中,如果遇到窗口白屏情况,请退出游戏后打开游戏存储目录,
-           依次进入[修复和扩展文件]文件夹-[修复]文件夹,运行[【运行后打开游戏】窗口白屏卡死.reg]文件,
-           运行后重新启动游戏即可。
-           
-           遇到Bug可进入 威化版公测组 反馈~
-          "@
-
-          # --- 获取输入变量 ---
           $Ver = "${{ inputs.version }}"
           $InputPre = "${{ inputs.pre_install_text }}"
           $InputPost = "${{ inputs.post_install_text }}"
+          
+          # Use a basic string to avoid ParserError
+          $Footer = "`r`n`r`n补充说明:`r`n 在游戏过程中,如果遇到窗口白屏情况,请退出游戏后打开游戏存储目录,`r`n 依次进入[修复和扩展文件]文件夹-[修复]文件夹,运行[【运行后打开游戏】窗口白屏卡死.reg]文件,`r`n 运行后重新启动游戏即可。`r`n `r`n 遇到Bug可进入 威化版公测组 反馈~"
 
-          # 确保 Setup 目录存在
-          if (-not (Test-Path "Setup")) { New-Item -ItemType Directory -Path "Setup" }
+          if (!(Test-Path "Setup")) { New-Item -ItemType Directory -Path "Setup" }
 
-          # --- A. 处理安装前文本 (IBF.txt) ---
-          if (-not [string]::IsNullOrWhiteSpace($InputPre)) {
-              Write-Host "检测到用户输入的更新内容..."
-              # 拼接格式: "版本更新内容:" + 换行 + 用户输入 + 换行 + 固定补充说明
-              $FinalIBF = "版本更新内容:`r`n$InputPre`r`n$FixedFooter"
+          # Pre-install text logic
+          if ($InputPre -and $InputPre.Trim() -ne "") {
+              $FinalIBF = "版本更新内容:`r`n" + $InputPre + $Footer
               $FinalIBF | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8
-              
-              # 设置 Release 的 Body (仅包含用户输入的更新内容)
-              "RELEASE_BODY<<EOF" >> $env:GITHUB_ENV
-              $InputPre >> $env:GITHUB_ENV
-              "EOF" >> $env:GITHUB_ENV
+              # Set Release Body
+              $InputPre | Out-File -FilePath "release_notes.txt" -Encoding utf8
           } else {
-              Write-Host "未输入更新内容，复制默认文件..."
               Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
-              "RELEASE_BODY=威化版 $Ver 发布" >> $env:GITHUB_ENV
+              "PVZ Weihua $Ver Release" | Out-File -FilePath "release_notes.txt" -Encoding utf8
           }
 
-          # --- B. 处理安装后文本 (IAF.txt) ---
-          if (-not [string]::IsNullOrWhiteSpace($InputPost)) {
-              Write-Host "检测到用户输入的安装后文本..."
+          # Post-install text logic
+          if ($InputPost -and $InputPost.Trim() -ne "") {
               $InputPost | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8
           } else {
-              Write-Host "未输入安装后文本，复制默认文件..."
               Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
           }
 
-      # ----------------------------------------------------------------
-      # 2. 处理 ISS 脚本 (变量替换)
-      # ----------------------------------------------------------------
+      # 2. Prepare ISS Script
       - name: Prepare ISS Script
         shell: powershell
         run: |
           $Ver = "${{ inputs.version }}"
-          $SrcIss = "src/Main.iss"
-          $DestIss = "Setup/PVZ_Weihua.iss"
+          $Content = Get-Content -Path "src/Main.iss" -Raw
+          # Regex replacement for your Main.iss 
+          $Content = $Content -replace '(#define\s+MyAppVerNum\s+")[^"]*(")', "`${1}$Ver`${2}"
+          $Content = $Content -replace '(#define\s+MyAppVerFull\s+")[^"]*(")', "`${1}$Ver`${2}"
+          [System.IO.File]::WriteAllText("Setup/PVZ_Weihua.iss", $Content, [System.Text.Encoding]::UTF8)
 
-          # 复制 Main.iss 到 Setup 目录
-          Copy-Item $SrcIss -Destination $DestIss -Force
-
-          # 读取文件内容
-          $Content = Get-Content -Path $DestIss -Raw -Encoding utf8
-
-          # 使用正则替换版本号
-          # 你的 Main.iss 中是 #define MyAppVerNum "" (空字符串)
-          # 我们将其替换为 #define MyAppVerNum "1.0.0"
-          $Content = $Content -replace '(#define\s+MyAppVerNum\s+")[^"]*(")', "`$1$Ver`$2"
-          $Content = $Content -replace '(#define\s+MyAppVerFull\s+")[^"]*(")', "`$1$Ver`$2"
-
-          # 保存修改后的 ISS (使用 UTF8 BOM 以防止中文乱码)
-          [System.IO.File]::WriteAllText($DestIss, $Content, [System.Text.Encoding]::UTF8)
-          
-          Write-Host "ISS 脚本已生成: $DestIss (版本号: $Ver)"
-
-      # ----------------------------------------------------------------
-      # 3. 编译 Installer
-      # ----------------------------------------------------------------
+      # 3. Compile Installer
       - name: Compile Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: Setup/PVZ_Weihua.iss
 
-      # ----------------------------------------------------------------
-      # 4. 查找生成的 EXE 文件
-      # ----------------------------------------------------------------
-      - name: Find Output File
-        id: find_exe
-        shell: powershell
-        run: |
-          # Main.iss 中配置 OutputDir=..\Output
-          # 所以生成的 exe 会在仓库根目录的 Output 文件夹中
-          $OutputFolder = "Output"
-          
-          # 查找生成的 exe (按修改时间排序，取最新的)
-          $ExePath = Get-ChildItem -Path $OutputFolder -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          
-          if ($ExePath) {
-            Write-Host "找到安装包: $($ExePath.FullName)"
-            echo "exe_path=$($ExePath.FullName)" >> $env:GITHUB_OUTPUT
-            echo "exe_name=$($ExePath.Name)" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Error "错误: 在 $OutputFolder 中未找到 EXE 文件!"
-            exit 1
-          }
-
-      # ----------------------------------------------------------------
-      # 5. 发布 Release
-      # ----------------------------------------------------------------
+      # 4. Create Release
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ inputs.version }}
-          name: 植物大战僵尸威化版 v${{ inputs.version }}
-          body: ${{ env.RELEASE_BODY }}
-          files: ${{ steps.find_exe.outputs.exe_path }}
-          draft: false
-          prerelease: false
+          name: PVZ Weihua v${{ inputs.version }}
+          body_path: release_notes.txt
+          files: Output/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
