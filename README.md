@@ -27,8 +27,11 @@
 
 # Actions 执行流程
 替换 IBF.txt 中的占位符。
+
 修改 Main.iss 中的版本定义。
+
 使用 Inno Setup v1.2.7 编译。
+
 自动创建 GitHub Release 并上传安装包。
 
 # 其他内容
