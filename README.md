@@ -35,25 +35,29 @@
 自动创建 GitHub Release 并上传安装包。
 
 # 其他内容
-  Github 仓库目录
 
-PVZ_Weihua/
-├── .github/
-│   └── workflows/          # 自动化构建、部署、测试脚本
-├── Game/                   # 游戏文件
-├── src/                    # 核心内容位置
-│   └── IPT/                # 安装文本
-│       └── IAF.txt         # 安装后文本
-│       └── IBF.txt         # 安装前文本
-│       └── LF.txt          # 许可协议
-│   └── Tools/              # 工具集
-│   └── Main.iss            # 原始脚本文件
-├── Setup/                  # inno setup 打包脚本内容
-│   └── ico.ico             # 安装图标
-│   └── ChineseSimplified.isl  # zh-cn 语言文件
-│   └── PVZ_Weihua.iss      # inno setup 脚本文件
-├── .gitignore              # 忽略不需要上传的文件（如本地日志、临时备份）
-└── README.md               # 项目主说明文档
+## Github 仓库目录
+
+- PVZ_Weihua/
+- ├── .github/
+- │   └── workflows/          # 自动化构建、部署、测试脚本
+- ├── Game/                   # 游戏文件
+- ├── src/                    # 核心内容位置
+- │   └── IPT/                # 安装文本
+- │       └── IAF.txt         # 安装后文本
+- │       └── IBF.txt         # 安装前文本
+- │       └── LF.txt          # 许可协议
+- │   └── Tools/              # 工具集
+- │   └── Main.iss            # 原始脚本文件
+- ├── Setup/                  # inno setup 打包脚本内容
+- │   └── ico.ico             # 安装图标
+- │   └── ChineseSimplified.isl  # zh-cn 文件
+- │   └── PVZ_Weihua.iss      # inno setup 脚本文件
+- ├── .gitignore              # 忽略不需要上传的文件（如本地日志、临时备份）    
+- └── README.md               # 项目主说明文档
+
+## Screenshot
+![screenshots](./files/screenshot.png)
 
 # 不足与展望
 > **本仓库为简易构建库,代码质量参差不齐,望本仓库起抛砖引玉效果**
