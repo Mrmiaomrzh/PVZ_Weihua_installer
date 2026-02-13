@@ -14,7 +14,7 @@ on:
         default: true
       pre_install_text:
         description: '安裝前文本 (更新日誌)'
-        required: false
+        required: true
         type: string
       post_install_text:
         description: '安裝後文本 (注意事項)'
@@ -33,7 +33,6 @@ jobs:
 
       - name: Prepare Assets and Script
         shell: powershell
-        # 使用環境變量傳遞輸入，徹底杜絕 PowerShell 解析注入錯誤
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           INPUT_INCLUDE_TOOLS: ${{ github.event.inputs.include_tools }}
@@ -44,8 +43,6 @@ jobs:
           $buildTime = Get-Date -Format "yyyyMMddHHmm"
           $baseVer = $env:INPUT_VERSION
           $verRaw = "$baseVer-$buildTime"
-          
-          # 清洗純數字版本號 (X.X.X.X) 供 VersionInfoVersion 使用
           $digits = ($baseVer -split '[^0-9]+' | Where-Object { $_ -ne "" })
           $verBinary = "$($digits[0..2] -join '.').0"
           if ([string]::IsNullOrEmpty($verBinary) -or $verBinary -eq ".0") { $verBinary = "1.0.0.0" }
@@ -74,7 +71,6 @@ jobs:
               }
           }
           $finalPreText = "[PRE-RELEASE] Build Time: $buildTime`r`n`r`n$preContent"
-          # 在 Windows PowerShell 5.1 中，utf8 參數會自動生成帶 BOM 的文件
           $finalPreText | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
 
           $postContent = $env:INPUT_POST_TEXT
@@ -89,7 +85,7 @@ jobs:
               $postContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
 
-          # 5. 修改 ISS 腳本並強制修正路徑
+          # 5. 修改 ISS 脚本文件
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua_Beta.iss"
           Copy-Item $issSource -Destination $issTarget -Force
@@ -100,21 +96,17 @@ jobs:
           $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$verRaw"""
           $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$verBinary"""
           
-          # 強制修正所有引用路徑，確保編譯器能找到文件
+          # 強制修正所有引用路徑
           $content = $content -replace 'InfoBeforeFile=.*', 'InfoBeforeFile=IBF.txt'
           $content = $content -replace 'InfoAfterFile=.*', 'InfoAfterFile=IAF.txt'
           $content = $content -replace 'LicenseFile=.*', 'LicenseFile=..\src\IPT\LF.txt'
           $content = $content -replace 'MessagesFile=.*', 'MessagesFile=ChineseSimplified.isl'
           $content = $content -replace 'SetupIconFile=.*', 'SetupIconFile=ico.ico'
-          
-          # 修正遊戲文件源路徑
           $content = $content -replace 'Source:\s*".*\\{#MyAppExeName}";', 'Source: "..\Game\{#MyAppExeName}";'
           $content = $content -replace 'Source:\s*".*\\\*";', 'Source: "..\Game\*";'
-          
-          # 以 UTF-8 (無BOM) 保存 ISS 文件
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, (New-Object System.Text.UTF8Encoding($False)))
           
-          # 輸出環境變量供後續 Release 步驟使用
+          # 輸出環境變量供後續 Pre-Release 步驟使用
           echo "FINAL_VER=$verRaw" >> $env:GITHUB_ENV
 
       - name: Compile Beta Installer
