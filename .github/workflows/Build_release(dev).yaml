@@ -8,7 +8,7 @@ on:
         required: true
         default: '1.0.0'
       pre_install_text:
-        description: 'Update Log (IBF): Will add prefix and suffix automatically.'
+        description: 'Update Log (IBF): Enter your update notes here.'
         required: false
         type: string
       post_install_text:
@@ -26,55 +26,76 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Process Text Files
+      # 1. 预处理：生成带中文的模板文件，避开 YAML 解析
+      - name: Prepare Template Files
+        shell: powershell
+        run: |
+          # 定义固定补充说明 (保存为临时文件，避免在脚本中直接写中文)
+          $Footer = @"
+
+          补充说明:
+           在游戏过程中,如果遇到窗口白屏情况,请退出游戏后打开游戏存储目录,
+           依次进入[修复和扩展文件]文件夹-[修复]文件夹,运行[【运行后打开游戏】窗口白屏卡死.reg]文件,
+           运行后重新启动游戏即可。
+           
+           遇到Bug可进入 威化版公测组 反馈~
+          "@
+          $Footer | Out-File -FilePath "footer.tmp" -Encoding utf8
+          
+          $Prefix = "版本更新内容:"
+          $Prefix | Out-File -FilePath "prefix.tmp" -Encoding utf8
+
+      # 2. 处理文本文件 (IBF.txt 和 IAF.txt)
       - name: Process Text Files
         shell: powershell
         run: |
           $Ver = "${{ inputs.version }}"
           $InputPre = "${{ inputs.pre_install_text }}"
           $InputPost = "${{ inputs.post_install_text }}"
-          
-          # Use a basic string to avoid ParserError
-          $Footer = "`r`n`r`n补充说明:`r`n 在游戏过程中,如果遇到窗口白屏情况,请退出游戏后打开游戏存储目录,`r`n 依次进入[修复和扩展文件]文件夹-[修复]文件夹,运行[【运行后打开游戏】窗口白屏卡死.reg]文件,`r`n 运行后重新启动游戏即可。`r`n `r`n 遇到Bug可进入 威化版公测组 反馈~"
 
           if (!(Test-Path "Setup")) { New-Item -ItemType Directory -Path "Setup" }
 
-          # Pre-install text logic
+          # 处理 IBF.txt (安装前)
           if ($InputPre -and $InputPre.Trim() -ne "") {
-              $FinalIBF = "版本更新内容:`r`n" + $InputPre + $Footer
+              $PrefixStr = Get-Content "prefix.tmp" -Raw
+              $FooterStr = Get-Content "footer.tmp" -Raw
+              $FinalIBF = $PrefixStr + "`r`n" + $InputPre + "`r`n" + $FooterStr
               $FinalIBF | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8
-              # Set Release Body
               $InputPre | Out-File -FilePath "release_notes.txt" -Encoding utf8
           } else {
               Copy-Item "src/IPT/IBF.txt" -Destination "Setup/IBF.txt" -Force
-              "PVZ Weihua $Ver Release" | Out-File -FilePath "release_notes.txt" -Encoding utf8
+              "PVZ Weihua $Ver" | Out-File -FilePath "release_notes.txt" -Encoding utf8
           }
 
-          # Post-install text logic
+          # 处理 IAF.txt (安装后)
           if ($InputPost -and $InputPost.Trim() -ne "") {
               $InputPost | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8
           } else {
               Copy-Item "src/IPT/IAF.txt" -Destination "Setup/IAF.txt" -Force
           }
 
-      # 2. Prepare ISS Script
+      # 3. 处理 ISS 脚本变量替换
       - name: Prepare ISS Script
         shell: powershell
         run: |
           $Ver = "${{ inputs.version }}"
-          $Content = Get-Content -Path "src/Main.iss" -Raw
-          # Regex replacement for your Main.iss 
+          # 读取 src/Main.iss 
+          $Content = Get-Content -Path "src/Main.iss" -Raw -Encoding utf8
+          
+          # 正则替换 MyAppVerNum 和 MyAppVerFull 
           $Content = $Content -replace '(#define\s+MyAppVerNum\s+")[^"]*(")', "`${1}$Ver`${2}"
           $Content = $Content -replace '(#define\s+MyAppVerFull\s+")[^"]*(")', "`${1}$Ver`${2}"
+          
+          # 写入 Setup/PVZ_Weihua.iss 
           [System.IO.File]::WriteAllText("Setup/PVZ_Weihua.iss", $Content, [System.Text.Encoding]::UTF8)
 
-      # 3. Compile Installer
+      # 4. 执行 Inno Setup 编译
       - name: Compile Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.7
         with:
           path: Setup/PVZ_Weihua.iss
 
-      # 4. Create Release
+      # 5. 发布 Release
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
