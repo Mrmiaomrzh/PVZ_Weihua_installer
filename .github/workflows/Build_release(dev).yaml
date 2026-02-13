@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '正式版本號 (例如: 0.1.1)'
+        description: '正式版本號 (例如: 0.4.7)'
         required: true
       include_tools:
         description: '是否一同打包遊戲補丁及工具 (src/Tools)?'
@@ -38,54 +38,65 @@ jobs:
           INPUT_PRE_TEXT: ${{ github.event.inputs.pre_install_text }}
           INPUT_POST_TEXT: ${{ github.event.inputs.post_install_text }}
         run: |
+          # 1. 版本号处理
           $verRaw = $env:INPUT_VERSION
-          
-          # 1. 提取純數字版本號 (X.X.X.X) 
           $digits = ($verRaw -split '[^0-9]+' | Where-Object { $_ -ne "" })
           $verBinary = "$($digits[0..2] -join '.').0"
           if ([string]::IsNullOrEmpty($verBinary) -or $verBinary -eq ".0") { $verBinary = "1.0.0.0" }
 
-          # 2. 目錄初始化
+          # 2. 目录初始化
           if (!(Test-Path "Output")) { New-Item -ItemType Directory -Path "Output" | Out-Null }
           if (!(Test-Path "Setup")) { New-Item -ItemType Directory -Path "Setup" | Out-Null }
 
-          # 3. 合併工具 (可選)
+          # 3. 合并工具
           if ($env:INPUT_INCLUDE_TOOLS -eq 'true' -and (Test-Path "src/Tools")) {
               Copy-Item -Path "src/Tools/*" -Destination "Game/" -Recurse -Force
           }
 
-          # 4. 處理安裝前文本 (嚴格遵循 Windows 換行規範)
+          # 4. 处理文本 (使用 Base64 避免中文乱码破坏脚本结构)
+          function Decode-B64 ($b64) {
+              return [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
+          }
+
+          $header = Decode-B64 "54mI5pys5pu05paw5YaF5a6577ya" # 版本更新內容：
+          $footerTitle = Decode-B64 "6KGl5充6Kqq5piOOg==" # 補充說明:
+          $noteLine1 = Decode-B64 "IOWcqOmuOaIsumBjueoizos5aaC5p6c6YGH5Yiw56qX5Y+j55m95bGP5o6D5rG1LOiri+mAnOWHuOmuOaIsumInuaJk+mKaiOmuOaIsumtmOWCqOebruWMmCw="
+          $noteLine2 = Decode-B64 "IOWพnemhuOmAsuWFp1vkv67lpI3lkowqOWxlemWuS7tF3mlYfku7blk6otW+kv67lpI3domWuS7tblk6os6YGL6KGMW+OAkOmGLuihjOWพnemTqueonuaIsumAkV3nqqXlj6P55m95bGP5Y2h5q27LnJlZ13mlYfku7Ys"
+          $noteLine3 = Decode-B64 "IOmGLuihjOWพnemHjeaWsOWIn+WLlemuOaIsumNs+WPr+OAgg=="
+          $bugFeedback = Decode-B64 "IOmYp+WIsEJ1Z+WPr+mAsuWFpSDlqIHljJbniaXlhazmuKzntYQg5Y+N6a6Lfg=="
+          $noContent = Decode-B64 "54Sh6KmarOatpOatpOWunOatpOiqqOatpOOAgg=="
+
           $userContent = $env:INPUT_PRE_TEXT
-          if ([string]::IsNullOrWhiteSpace($userContent)) { $userContent = "無詳細更新說明。" }
-          
+          if ([string]::IsNullOrWhiteSpace($userContent)) { $userContent = $noContent }
+
           $lines = @()
-          $lines += "版本更新內容："
+          $lines += $header
           $lines += $userContent
           $lines += ""
-          $lines += "補充說明:"
+          $lines += $footerTitle
           $lines += ""
-          $lines += " 在遊戲過程中,如果遇到窗口白屏情況,請退出遊戲後打開遊戲存儲目錄,"
-          $lines += " 依次進入[修復和擴展文件]文件夾-[修復]文件夾,運行[【運行後打開遊戲】窗口白屏卡死.reg]文件,"
-          $lines += " 運行後重新啟動遊戲即可。"
+          $lines += $noteLine1
+          $lines += $noteLine2
+          $lines += $noteLine3
           $lines += ""
-          $lines += " 遇到Bug可進入 威化版公測組 反饋~"
+          $lines += $bugFeedback
 
           $finalPreText = $lines -join "`r`n"
           $finalPreText | Out-File -FilePath "Setup/IBF.txt" -Encoding utf8 -Force
 
-          # 5. 處理安裝後文本
+          # 5. 处理安装后文本
           $postContent = $env:INPUT_POST_TEXT
           if ([string]::IsNullOrWhiteSpace($postContent)) {
               if (Test-Path "src/IPT/IAF.txt") {
                   Get-Content "src/IPT/IAF.txt" -Raw | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
               } else {
-                  "安裝完成。" | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
+                  (Decode-B64 "5a6J6KOX5a6M5oiQ44CC") | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
               }
           } else {
               $postContent | Out-File -FilePath "Setup/IAF.txt" -Encoding utf8 -Force
           }
 
-          # 6. 修改並修正 ISS 腳本
+          # 6. 修改 ISS 脚本
           $issSource = "src/Main.iss"
           $issTarget = "Setup/PVZ_Weihua.iss"
           Copy-Item $issSource -Destination $issTarget -Force
@@ -94,7 +105,7 @@ jobs:
           $content = $content -replace '(#define\s+MyAppVerNum\s+)"[^"]*"', "`$1""$verRaw"""
           $content = $content -replace '(#define\s+MyAppVerFull\s+)"[^"]*"', "`$1""$verBinary"""
           
-          # 強制修正 ISS 關鍵路徑
+          # 修正 ISS 路径引用
           $content = $content -replace 'InfoBeforeFile=.*', 'InfoBeforeFile=IBF.txt'
           $content = $content -replace 'InfoAfterFile=.*', 'InfoAfterFile=IAF.txt'
           $content = $content -replace 'LicenseFile=.*', 'LicenseFile=..\src\IPT\LF.txt'
@@ -103,7 +114,6 @@ jobs:
           $content = $content -replace 'Source:\s*".*\\{#MyAppExeName}";', 'Source: "..\Game\{#MyAppExeName}";'
           $content = $content -replace 'Source:\s*".*\\\*";', 'Source: "..\Game\*";'
           
-          # 以 UTF-8 寫入 ISS 腳本
           $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
           [System.IO.File]::WriteAllText((Get-Item $issTarget).FullName, $content, $utf8NoBom)
 
